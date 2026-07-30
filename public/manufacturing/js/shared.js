@@ -1,0 +1,171 @@
+// Apply the saved theme before the page paints, avoiding a light-mode flash.
+if (localStorage.getItem('manufacturing-theme') === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+}
+
+function syncDarkModeToggleUI() {
+    const knob = document.getElementById('dark-mode-toggle-knob');
+    const track = document.getElementById('dark-mode-toggle-track');
+    if (!knob || !track) return;
+
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    knob.classList.toggle('translate-x-1', !dark);
+    knob.classList.toggle('translate-x-4', dark);
+    track.classList.toggle('bg-nexora-corporate', dark);
+    track.classList.toggle('bg-nexora-slate-200', !dark);
+}
+
+function toggleDarkMode() {
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    document.documentElement.toggleAttribute('data-theme', !dark);
+    localStorage.setItem('manufacturing-theme', dark ? 'light' : 'dark');
+    syncDarkModeToggleUI();
+}
+
+document.addEventListener('DOMContentLoaded', syncDarkModeToggleUI);
+
+function openModal(id) {
+    document.getElementById(id).classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeModal(id) {
+    document.getElementById(id).classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
+// The Manufacturing header uses a lightweight profile card rather than a
+// modal backdrop. Keep its visibility state and accessibility state together.
+function toggleProfileDropdown() {
+    const dropdown = document.getElementById('profileDropdown');
+    const trigger = document.getElementById('profileTrigger');
+    if (!dropdown) return;
+
+    const isOpen = !dropdown.classList.contains('pointer-events-none');
+    dropdown.classList.toggle('opacity-0', isOpen);
+    dropdown.classList.toggle('-translate-y-2', isOpen);
+    dropdown.classList.toggle('pointer-events-none', isOpen);
+    trigger?.setAttribute('aria-expanded', String(!isOpen));
+}
+
+document.addEventListener('click', event => {
+    const dropdown = document.getElementById('profileDropdown');
+    const trigger = document.getElementById('profileTrigger');
+    if (!dropdown || dropdown.classList.contains('pointer-events-none')) return;
+    if (!dropdown.contains(event.target) && !trigger?.contains(event.target)) {
+        toggleProfileDropdown();
+    }
+});
+
+function handleBackdropClick(event, id) {
+    if (event.target === event.currentTarget) closeModal(id);
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    document.querySelectorAll('.modal-backdrop:not(.hidden)').forEach(el => {
+        closeModal(el.id);
+    });
+});
+
+function showSuccess(msg) {
+    document.getElementById('success-text').textContent = msg;
+    document.getElementById('success-notif').classList.remove('hidden');
+}
+
+function closeSuccessNotif() {
+    document.getElementById('success-notif').classList.add('hidden');
+}
+
+function showOrder(index) {
+    document.querySelectorAll('[id^="detail-"]').forEach(el => el.classList.add('hidden'));
+    const detailPanel = document.getElementById('detail-' + index);
+    if (detailPanel) detailPanel.classList.remove('hidden');
+
+    document.querySelectorAll('[id^="card-"]').forEach(el => {
+        el.classList.remove('bg-nexora-steel-blue/80');
+        el.classList.add('hover:bg-nexora-steel-blue/50', 'hover:-translate-y-[2px]', 'hover:shadow-md');
+    });
+
+    const activeCard = document.getElementById('card-' + index);
+    if (activeCard) {
+        activeCard.classList.add('bg-nexora-steel-blue/80');
+        activeCard.classList.remove('hover:bg-nexora-steel-blue/50', 'hover:-translate-y-[2px]', 'hover:shadow-md');
+    }
+
+    if (document.getElementById('assignment-banner')) {
+        selectedOrderIndex  = index;
+        selectedWorkerIndex = null;
+        history.replaceState({}, '', `?page=orders&sub=assignment&order=${index}`);
+        updateAssignmentBanner();
+        updateWorkerSelectionHighlight();
+    }
+}
+
+let currentFilter = 'all';
+
+function filterOrders(status) {
+    currentFilter = status;
+    const searchEl = document.getElementById('search-input');
+    const search   = searchEl ? searchEl.value.toLowerCase() : '';
+
+    document.querySelectorAll('[id^="card-"]').forEach(card => {
+        const matchesStatus = status === 'all' || card.dataset.status === status;
+        const matchesSearch = card.dataset.name.toLowerCase().includes(search);
+        card.classList.toggle('hidden', !(matchesStatus && matchesSearch));
+    });
+
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.remove('bg-nexora-corporate', 'text-white');
+        btn.classList.add('text-nexora-deep-navy');
+    });
+
+    const activeBtn = document.querySelector(`[data-filter="${status}"]`);
+    if (activeBtn) {
+        activeBtn.classList.add('bg-nexora-corporate', 'text-white');
+        activeBtn.classList.remove('text-nexora-deep-navy');
+    }
+
+    reanimateRows();
+}
+
+function reanimateRows() {
+    const visibleRows = document.querySelectorAll('.row-animate:not(.hidden)');
+    visibleRows.forEach(row => row.classList.remove('animate', 'done'));
+    setTimeout(() => {
+        visibleRows.forEach((row, i) => {
+            setTimeout(() => row.classList.add('animate'), i * 20);
+        });
+    }, 20);
+}
+
+function initRowAnimations() {
+    document.querySelectorAll('.row-animate').forEach(row => {
+        row.addEventListener('animationend', () => row.classList.add('done'));
+    });
+    reanimateRows();
+}
+
+// ── Universal Confirm Modal ────────────────────────────────────────────────
+let _confirmCallback = null;
+
+function openConfirmModal(message, callback, options = {}) {
+    document.getElementById('universal-confirm-title').textContent   = options.title || 'Are you sure?';
+    document.getElementById('universal-confirm-message').textContent = message;
+
+    const confirmBtn = document.getElementById('universal-confirm-btn');
+    confirmBtn.textContent = options.confirmLabel || 'Confirm';
+    confirmBtn.className = options.dangerous
+        ? 'px-4 py-1.5 rounded-full text-xs font-semibold bg-nexora-danger text-white hover:opacity-90 transition-colors'
+        : 'px-4 py-1.5 rounded-full text-xs font-semibold bg-nexora-corporate text-white hover:bg-nexora-navy-mid transition-colors';
+
+    _confirmCallback = callback;
+    openModal('universal-confirm-backdrop');
+}
+
+function runConfirmedAction() {
+    closeModal('universal-confirm-backdrop');
+    const callback = _confirmCallback;
+    _confirmCallback = null;
+    if (typeof callback === 'function') callback();
+}
